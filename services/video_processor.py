@@ -3,15 +3,11 @@ import yt_dlp
 import subprocess
 from pathlib import Path
 import logging
-import shutil
-import uuid
-from uuid import uuid4
 from dotenv import load_dotenv
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
-
 
 class VideoProcessor:
     def __init__(self):
@@ -48,27 +44,31 @@ class VideoProcessor:
             raise Exception(f"Не удалось скачать видео: {str(e)}")
 
     async def extract_audio(self, video_path: str) -> str:
+        """
+        Извлечение аудио из видео
+        """
         try:
             video_path = Path(video_path)
-            audio_path = self.upload_dir / f"audio_{uuid4().hex}.wav"
-
+            audio_path = video_path.with_suffix('.wav')
+            
+            # Извлечение аудио с помощью ffmpeg
             cmd = [
                 'ffmpeg', '-i', str(video_path),
-                '-ar', '16000',
-                '-ac', '1',
-               '-c:a', 'pcm_s16le',
+                '-ar', '16000',  # Частота дискретизации 16kHz
+                '-ac', '1',      # Моно
+                '-c:a', 'pcm_s16le',
                 str(audio_path),
-                '-y'
+                '-y'  # Перезаписать файл
             ]
-
+            
             result = subprocess.run(cmd, capture_output=True, text=True)
-
+            
             if result.returncode != 0:
                 raise Exception(f"FFmpeg error: {result.stderr}")
-
+            
             logger.info(f"Аудио извлечено: {audio_path}")
             return str(audio_path)
-
+            
         except Exception as e:
             logger.error(f"Ошибка при извлечении аудио: {str(e)}")
             raise Exception(f"Не удалось извлечь аудио: {str(e)}")

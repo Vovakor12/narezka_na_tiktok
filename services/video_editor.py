@@ -42,7 +42,7 @@ class VideoEditor:
                     '-to', str(highlight.end_time),
                     '-i', str(video_path),
                     '-vf', f"subtitles='{srt_path.as_posix()}'",
-                    '-c:v', 'libx264',  # или 'h264_nvenc' если доступен
+                    '-c:v', 'h264_nvenc',  # или 'h264_nvenc' если доступен
                     '-c:a', 'aac',
                     str(clip_path),
                     '-y'
