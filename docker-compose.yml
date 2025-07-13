@@ -1,37 +1,111 @@
 version: '3.8'
 
 services:
+  # Главное приложение FastAPI
   app:
-    build: .
+    build: 
+      context: .
+      dockerfile: Dockerfile
     ports:
       - "8000:8000"
     environment:
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://redis:6379/0
       - UPLOAD_DIR=/app/uploads
       - OUTPUT_DIR=/app/outputs
+      - COOKIES_FILE=/app/cookies.txt
+      - PYTHONPATH=/app
     volumes:
       - ./uploads:/app/uploads
       - ./outputs:/app/outputs
+      - ./cookies.txt:/app/cookies.txt:ro
+      - ./logs:/app/logs
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - video_processing_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+  # Redis для хранения статусов задач
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
     restart: unless-stopped
+    networks:
+      - video_processing_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # Celery Worker для фоновых задач
   worker:
-    build: .
-    command: celery -A main.celery worker --loglevel=info
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A main.celery worker --loglevel=info --concurrency=2
     environment:
-      - REDIS_URL=redis://redis:6379
+      - REDIS_URL=redis://redis:6379/0
       - UPLOAD_DIR=/app/uploads
       - OUTPUT_DIR=/app/outputs
+      - COOKIES_FILE=/app/cookies.txt
+      - PYTHONPATH=/app
     volumes:
       - ./uploads:/app/uploads
       - ./outputs:/app/outputs
+      - ./cookies.txt:/app/cookies.txt:ro
+      - ./logs:/app/logs
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
+    networks:
+      - video_processing_network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "main.celery", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Celery Flower для мониторинга (опционально)
+  flower:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    command: celery -A main.celery flower --port=5555
+    ports:
+      - "5555:5555"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - video_processing_network
+    profiles:
+      - monitoring
+
+# Volumes для persistent данных
+volumes:
+  redis_data:
+    driver: local
+
+# Сеть для изоляции сервисов
+networks:
+  video_processing_network:
+    driver: bridge

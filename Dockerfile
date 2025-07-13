@@ -4,41 +4,52 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
+    wget \
+    curl \
+    fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
+# Создание пользователя для безопасности
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Установка рабочей директории
 WORKDIR /app
 
-# Копирование зависимостей
+# Копирование и установка Python зависимостей
 COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Установка Python зависимостей
-RUN pip install --no-cache-dir -r requirements.txt
+# Предварительная загрузка модели Whisper для оптимизации
+RUN python -c "import whisper; whisper.load_model('medium')"
 
-# Копирование кода
+# Копирование кода приложения
 COPY . .
 
-# Создание директорий
-RUN mkdir -p uploads outputs
+# Создание необходимых директорий
+RUN mkdir -p uploads outputs logs && \
+    chown -R appuser:appuser /app
 
-# Запуск приложения
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Копирование шрифта для субтитров (если есть)
+RUN if [ -f "ofont.ru_Liberation Sans.ttf" ]; then \
+        mkdir -p /usr/share/fonts/truetype/liberation && \
+        cp "ofont.ru_Liberation Sans.ttf" /usr/share/fonts/truetype/liberation/ && \
+        fc-cache -fv; \
+    fi
 
-# deploy.sh
-#!/bin/bash
+# Переключение на непривилегированного пользователя
+USER appuser
 
-# Скрипт для деплоя на сервер
+# Установка переменных окружения
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
 
-echo "Деплой Video Processing API..."
+# Expose порт
+EXPOSE 8000
 
-# Остановка старых контейнеров
-docker-compose down
+# Healthcheck
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
 
-# Сборка новых образов
-docker-compose build
-
-# Запуск сервисов
-docker-compose up -d
-
-echo "Деплой завершен!"
-echo "API доступен по адресу: http://localhost:8000"
-echo "Документация: http://localhost:8000/docs"
+# Команда по умолчанию
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
