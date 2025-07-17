@@ -13,26 +13,39 @@ class AudioTranscriber:
     
     async def transcribe(self, audio_path: str) -> Dict:
         """
-        Транскрипция аудио с помощью Whisper
+        Транскрипция аудио с помощью Whisper с пословными таймингами
         """
         try:
             logger.info(f"Начинаю транскрипцию: {audio_path}")
             
-            # Транскрипция
+            # Транскрипция с word_timestamps для караоке
             result = self.model.transcribe(
                 audio_path,
                 verbose=True,
-                word_timestamps=True
+                word_timestamps=True,  # Важно для караоке-эффекта
+                language=None  # Автоопределение языка
             )
             
             # Форматирование результата
             segments = []
             for segment in result["segments"]:
+                # Извлекаем слова с таймингами
+                words = []
+                if "words" in segment:
+                    for word_data in segment["words"]:
+                        words.append({
+                            "word": word_data.get("word", "").strip(),
+                            "start": word_data.get("start", 0),
+                            "end": word_data.get("end", 0),
+                            "probability": word_data.get("probability", 0)
+                        })
+                
                 segments.append({
                     "start": segment["start"],
                     "end": segment["end"],
                     "text": segment["text"].strip(),
-                    "confidence": segment.get("avg_logprob", 0)
+                    "confidence": segment.get("avg_logprob", 0),
+                    "words": words  # Добавляем пословную информацию
                 })
             
             transcription_result = {
@@ -43,6 +56,11 @@ class AudioTranscriber:
             }
             
             logger.info(f"Транскрипция завершена. Найдено {len(segments)} сегментов")
+            
+            # Логирование для отладки
+            for i, seg in enumerate(segments[:3]):  # Первые 3 сегмента для примера
+                logger.debug(f"Сегмент {i}: {seg['text'][:50]}... Words: {len(seg.get('words', []))}")
+            
             return transcription_result
             
         except Exception as e:

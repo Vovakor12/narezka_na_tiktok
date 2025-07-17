@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     curl \
     fonts-liberation \
+    fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
 # Создание пользователя для безопасности
@@ -27,15 +28,13 @@ RUN python -c "import whisper; whisper.load_model('medium')"
 COPY . .
 
 # Создание необходимых директорий
-RUN mkdir -p uploads outputs logs && \
+RUN mkdir -p uploads outputs logs fonts && \
     chown -R appuser:appuser /app
 
-# Копирование шрифта для субтитров (если есть)
-RUN if [ -f "ofont.ru_Liberation Sans.ttf" ]; then \
-        mkdir -p /usr/share/fonts/truetype/liberation && \
-        cp "ofont.ru_Liberation Sans.ttf" /usr/share/fonts/truetype/liberation/ && \
-        fc-cache -fv; \
-    fi
+# Загрузка дополнительных шрифтов для субтитров
+RUN wget -O /usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf \
+    "https://github.com/liberationfonts/liberation-fonts/raw/main/src/LiberationSans-Bold.ttf" || true && \
+    fc-cache -fv
 
 # Переключение на непривилегированного пользователя
 USER appuser
