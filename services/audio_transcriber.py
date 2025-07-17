@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class AudioTranscriber:
     def __init__(self):
         # Загрузка модели Whisper
-        self.model = whisper.load_model("medium")
+        self.model = whisper.load_model("tiny")
         logger.info("Модель Whisper загружена")
     
     async def transcribe(self, audio_path: str) -> Dict:
